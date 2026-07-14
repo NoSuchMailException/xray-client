@@ -1,0 +1,12 @@
+inbound:
+  listen: "127.0.0.1"
+  port: 1080
+
+outbound:
+  address: "your-vps.com"
+  port: 443
+  uuid: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  public_key: "your-public-key"
+  short_id: "your-short-id"
+  server_name: "www.microsoft.com"
+  fingerprint: "chrome"
