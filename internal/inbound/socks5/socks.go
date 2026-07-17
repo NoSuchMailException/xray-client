@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 
 	"github.com/NoSuchMailException/xray-client/internal/inbound"
@@ -31,7 +30,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		slog.Error("[socks5] listener connect error", "Error", err)
 		return fmt.Errorf("listen: %w", err)
 	}
 
@@ -46,15 +44,13 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			slog.Error("[socks5] get connection error", "Error", err)
-			return err
+			return fmt.Errorf("accept: %w", err)
 		}
 
 		// Go 1.22+: loop variable is copied per iteration, no shadowing needed
 		go func() {
 			target, err := handshakeSocks5(conn)
 			if err != nil {
-				slog.Error("[socks5] handshake error", "Error", err)
 				conn.Close()
 				return
 			}

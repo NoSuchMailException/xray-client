@@ -3,7 +3,6 @@ package xray
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 
 	"github.com/NoSuchMailException/xray-client/internal/outbound"
@@ -21,7 +20,6 @@ func NewClient() *Client {
 func (c *Client) Connect(ctx context.Context, target string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", target)
 	if err != nil {
-		slog.Error("[xray] dial error", "Error", err)
 		return nil, fmt.Errorf("dial: %w", err)
 	}
 
