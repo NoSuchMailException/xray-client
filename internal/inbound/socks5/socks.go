@@ -29,7 +29,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	listner, err := net.Listen("tcp", s.addr)
+	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		slog.Error("[socks5] listener connect error", "Error", err)
 		return fmt.Errorf("listen: %w", err)
@@ -37,11 +37,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		listner.Close()
+		listener.Close()
 	}()
 
 	for {
-		conn, err := listner.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
