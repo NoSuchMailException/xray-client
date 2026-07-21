@@ -4,6 +4,7 @@ package inbound
 
 import (
 	"context"
+	"errors"
 	"net"
 )
 
@@ -26,3 +27,6 @@ type Inbound interface {
 	// Blocks until a new connection arrives.
 	Accept() (*Request, error)
 }
+
+// ErrClosed is returned by Accept when the inbound listener has been closed.
+var ErrClosed = errors.New("inbound closed")

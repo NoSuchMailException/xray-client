@@ -27,6 +27,7 @@ func NewServer(addr string) *Server {
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	defer close(s.channel)
 
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -63,7 +64,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 }
 
 func (s *Server) Accept() (*inbound.Request, error) {
-	return <-s.channel, nil
+	req, ok := <-s.channel
+	if !ok {
+		return nil, inbound.ErrClosed
+	}
+	return req, nil
 }
 
 func handshakeSocks5(conn net.Conn) (string, error) {
