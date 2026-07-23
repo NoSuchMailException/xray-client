@@ -11,10 +11,9 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-func buildSessionID(serverPub []byte, shortID []byte) (sessionID [32]byte, ePub [32]byte, err error) {
-	var ePriv [32]byte
-	if _, err := rand.Read(ePriv[:]); err != nil {
-		return sessionID, ePub, fmt.Errorf("rand: %w", err)
+func buildSessionID(serverPub []byte, shortID []byte) (sessionID, ePub, ePriv [32]byte, err error) {
+	if _, err = rand.Read(ePriv[:]); err != nil {
+		return sessionID, ePub, ePriv, fmt.Errorf("rand: %w", err)
 	}
 
 	ePriv[0] &= 248
@@ -24,7 +23,7 @@ func buildSessionID(serverPub []byte, shortID []byte) (sessionID [32]byte, ePub 
 	curve25519.ScalarBaseMult(&ePub, &ePriv)
 	sharedSecret, err := curve25519.X25519(ePriv[:], serverPub)
 	if err != nil {
-		return sessionID, ePub, fmt.Errorf("x25519: %w", err)
+		return sessionID, ePub, ePriv, fmt.Errorf("x25519: %w", err)
 	}
 
 	window := time.Now().Unix() / 30
@@ -40,5 +39,5 @@ func buildSessionID(serverPub []byte, shortID []byte) (sessionID [32]byte, ePub 
 
 	copy(sessionID[0:24], authToken[0:24])
 	copy(sessionID[24:32], shortID)
-	return sessionID, ePub, nil
+	return sessionID, ePub, ePriv, nil
 }
