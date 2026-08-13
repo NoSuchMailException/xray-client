@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/NoSuchMailException/xray-client/internal/inbound"
 )
@@ -20,14 +22,21 @@ type Server struct {
 func NewServer(addr string) *Server {
 	return &Server{
 		addr:    addr,
-		channel: make(chan *inbound.Request),
+		channel: make(chan *inbound.Request, 256),
 	}
 }
 
+// ListenAndServe starts the local inbound SOCKS5 proxy, listens for connections,
+// and dispatches incoming requests to the internal processing channel.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer close(s.channel)
+
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		close(s.channel)
+	}()
 
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -48,18 +57,21 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		// Go 1.22+: loop variable is copied per iteration, no shadowing needed
-		go func() {
+		wg.Go(func() {
+			_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 			target, err := handshakeSocks5(conn)
 			if err != nil {
 				conn.Close()
 				return
 			}
-			s.channel <- &inbound.Request{
-				Conn:   conn,
-				Target: target,
+			_ = conn.SetDeadline(time.Time{})
+
+			select {
+			case s.channel <- &inbound.Request{Conn: conn, Target: target}:
+			case <-ctx.Done():
+				conn.Close()
 			}
-		}()
+		})
 	}
 }
 

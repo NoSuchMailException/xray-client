@@ -9,4 +9,5 @@ outbound:
   public_key: "your-public-key"
   short_id: "your-short-id"
   server_name: "www.microsoft.com"
+  grpc_service_name: "inbound_name"
   fingerprint: "chrome"

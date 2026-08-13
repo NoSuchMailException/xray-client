@@ -20,13 +20,14 @@ type InboundConfig struct {
 }
 
 type OutboundConfig struct {
-	Address     string `yaml:"address"`
-	Port        uint16 `yaml:"port"`
-	UUID        string `yaml:"uuid"`
-	PublicKey   string `yaml:"public_key"`
-	ShortID     string `yaml:"short_id"`
-	ServerName  string `yaml:"server_name"`
-	Fingerprint string `yaml:"fingerprint"`
+	Address         string `yaml:"address"`
+	Port            uint16 `yaml:"port"`
+	UUID            string `yaml:"uuid"`
+	PublicKey       string `yaml:"public_key"`
+	ShortID         string `yaml:"short_id"`
+	ServerName      string `yaml:"server_name"`
+	GRPCServiceName string `yaml:"grpc_service_name"`
+	Fingerprint     string `yaml:"fingerprint"`
 }
 
 // Load reads and parses a YAML configuration file at the given path.

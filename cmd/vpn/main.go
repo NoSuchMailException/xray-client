@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,6 +18,19 @@ import (
 )
 
 func main() {
+	verbose := flag.Bool("v", false, "enable debug logging")
+	flag.Parse()
+
+	level := slog.LevelInfo
+	if *verbose {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
+
+	slog.Debug("with debug")
+
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		slog.Error("[config] load config", "err", err)

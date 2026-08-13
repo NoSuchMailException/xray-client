@@ -1,43 +1,48 @@
 package xray
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
-	"time"
 
-	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/hkdf"
 )
 
-func buildSessionID(serverPub []byte, shortID []byte) (sessionID, ePub, ePriv [32]byte, err error) {
-	if _, err = rand.Read(ePriv[:]); err != nil {
-		return sessionID, ePub, ePriv, fmt.Errorf("rand: %w", err)
+func deriveAuthKey(ecdhe *ecdh.PrivateKey, serverPub []byte, clientRandom []byte) ([]byte, error) {
+	if len(clientRandom) < 20 {
+		return nil, fmt.Errorf("clientRandom must be at least 20 bytes")
 	}
 
-	ePriv[0] &= 248
-	ePriv[31] &= 127
-	ePriv[31] |= 64
-
-	curve25519.ScalarBaseMult(&ePub, &ePriv)
-	sharedSecret, err := curve25519.X25519(ePriv[:], serverPub)
+	pub, err := ecdh.X25519().NewPublicKey(serverPub)
 	if err != nil {
-		return sessionID, ePub, ePriv, fmt.Errorf("x25519: %w", err)
+		return nil, fmt.Errorf("server public key: %w", err)
 	}
 
-	window := time.Now().Unix() / 30
+	sharedSecret, err := ecdhe.ECDH(pub)
+	if err != nil {
+		return nil, fmt.Errorf("ecdh: %w", err)
+	}
 
-	h := hmac.New(sha256.New, sharedSecret)
-	h.Write([]byte("REALITY"))
+	authKey := make([]byte, 32)
+	r := hkdf.New(sha256.New, sharedSecret, clientRandom[:20], []byte("REALITY"))
+	if _, err := r.Read(authKey); err != nil {
+		return nil, fmt.Errorf("hkdf: %w", err)
+	}
 
-	var windowBytes [8]byte
-	binary.BigEndian.PutUint64(windowBytes[:], uint64(window))
-	h.Write(windowBytes[:])
+	return authKey, nil
+}
 
-	authToken := h.Sum(nil)
-
-	copy(sessionID[0:24], authToken[0:24])
-	copy(sessionID[24:32], shortID)
-	return sessionID, ePub, ePriv, nil
+func sealSessionID(sessionId []byte, authKey []byte, nonce []byte, helloRaw []byte) ([]byte, error) {
+	block, err := aes.NewCipher(authKey)
+	if err != nil {
+		return nil, fmt.Errorf("aes: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("gcm: %w", err)
+	}
+	aead.Seal(sessionId[:0], nonce, sessionId[:16], helloRaw)
+	return sessionId, nil
 }

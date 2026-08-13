@@ -4,8 +4,7 @@ package relay
 import (
 	"context"
 	"fmt"
-	"io"
-	"net"
+	"log/slog"
 	"sync"
 
 	"github.com/NoSuchMailException/xray-client/internal/inbound"
@@ -42,31 +41,78 @@ func (r *Relay) Run(ctx context.Context) error {
 			return fmt.Errorf("inbound accept: %w", err)
 		}
 
-		target := req.Target
-		inboundConn := req.Conn
-
-		outboundConn, err := r.Outbound.Connect(ctx, target)
-		if err != nil {
-			return fmt.Errorf("outbound connect: %w", err)
-		}
-
-		go func(localConn, vpsConn net.Conn) {
-			var wg sync.WaitGroup
-			wg.Add(2)
-
-			go func() {
-				defer wg.Done()
-				io.Copy(vpsConn, localConn)
-			}()
-
-			go func() {
-				defer wg.Done()
-				io.Copy(localConn, vpsConn)
-			}()
-
-			wg.Wait()
-			localConn.Close()
-			vpsConn.Close()
-		}(inboundConn, outboundConn)
+		slog.Debug("[relay] accepted request", "target", req.Target)
+		go r.handle(ctx, req)
 	}
+}
+
+func (r *Relay) handle(ctx context.Context, req *inbound.Request) {
+	defer req.Conn.Close()
+
+	stream, cleanup, err := r.Outbound.Connect(ctx, req.Target)
+	if err != nil {
+		slog.Debug("[relay] outbound error", "err", err)
+		return
+	}
+	defer cleanup()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		defer stream.CloseSend()
+
+		buf := make([]byte, 32*1024)
+
+		for {
+			n, err := req.Conn.Read(buf)
+			if n > 0 {
+				if sendErr := stream.SendMsg(buf[:n]); sendErr != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		defer req.Conn.Close()
+
+		isFirstRecv := true
+		for {
+			var resp []byte
+			if err := stream.RecvMsg(&resp); err != nil {
+				break
+			}
+
+			if isFirstRecv {
+				isFirstRecv = false
+
+				if len(resp) < 2 {
+					slog.Debug("vless response header too short")
+					break
+				}
+
+				addonLen := int(resp[1])
+				headerLen := 2 + addonLen
+
+				if len(resp) < headerLen {
+					slog.Debug("vless response header truncated")
+					break
+				}
+
+				resp = resp[headerLen:]
+			}
+
+			if _, err := req.Conn.Write(resp); err != nil {
+				break
+			}
+		}
+	}()
+
+	wg.Wait()
 }
