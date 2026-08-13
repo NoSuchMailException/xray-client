@@ -47,7 +47,11 @@ func main() {
 
 	address := fmt.Sprintf("%s:%d", cfg.Inbound.Listen, cfg.Inbound.Port)
 	inbound := socks5.NewServer(address)
-	outbound := xray.NewClient(cfg.Outbound)
+	outbound, err := xray.NewClient(cfg.Outbound)
+	if err != nil {
+		slog.Error("failed to initialize client", "err", err)
+		os.Exit(1)
+	}
 	relay := relayPkg.NewRelay(inbound, outbound)
 
 	go func() {

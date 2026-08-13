@@ -23,32 +23,46 @@ import (
 var _ outbound.Outbound = (*Client)(nil)
 
 type Client struct {
-	cfg config.OutboundConfig
+	cfg       config.OutboundConfig
+	serverPub []byte
+	shortID   []byte
+	uuidBytes [16]byte
+	address   string
 }
 
 // NewClient creates a new VLESS+REALITY outbound client.
-func NewClient(cfg config.OutboundConfig) *Client {
-	return &Client{cfg: cfg}
+func NewClient(cfg config.OutboundConfig) (*Client, error) {
+	serverPub, err := base64.RawURLEncoding.DecodeString(cfg.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid public_key")
+	}
+
+	shortID, err := hex.DecodeString(cfg.ShortID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid short_id")
+	}
+
+	uuidBytes, err := parseUUID(cfg.UUID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid uuid")
+	}
+
+	address := net.JoinHostPort(cfg.Address, fmt.Sprintf("%d", cfg.Port))
+
+	return &Client{
+		cfg:       cfg,
+		serverPub: serverPub,
+		shortID:   shortID,
+		uuidBytes: uuidBytes,
+		address:   address,
+	}, nil
 }
 
 // Connect establishes a VLESS+REALITY connection to the VPS
 // and returns a grpc.ClientStream ready for proxying data to target.
 func (c *Client) Connect(ctx context.Context, target string) (grpc.ClientStream, func(), error) {
-
-	serverPub, err := base64.RawURLEncoding.DecodeString(c.cfg.PublicKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode public key: %w", err)
-	}
-
-	shortID, err := hex.DecodeString(c.cfg.ShortID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode short id: %w", err)
-	}
-
-	address := net.JoinHostPort(c.cfg.Address, fmt.Sprintf("%d", c.cfg.Port))
-
 	var dialer net.Dialer
-	tcpConn, err := dialer.DialContext(ctx, "tcp", address)
+	tcpConn, err := dialer.DialContext(ctx, "tcp", c.address)
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial: %w", err)
 	}
@@ -81,9 +95,9 @@ func (c *Client) Connect(ctx context.Context, target string) (grpc.ClientStream,
 	hello.SessionId[2] = 4 // z
 	hello.SessionId[3] = 0 // reserved
 	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
-	copy(hello.SessionId[8:], shortID)
+	copy(hello.SessionId[8:], c.shortID)
 
-	authKey, err := deriveAuthKey(ecdhe, serverPub, hello.Random)
+	authKey, err := deriveAuthKey(ecdhe, c.serverPub, hello.Random)
 	if err != nil {
 		tcpConn.Close()
 		return nil, nil, fmt.Errorf("derive auth key: %w", err)
@@ -108,19 +122,13 @@ func (c *Client) Connect(ctx context.Context, target string) (grpc.ClientStream,
 	}
 	slog.Debug("[xray] certificate cecked, connected")
 
-	uuidBytes, err := parseUUID(c.cfg.UUID)
-	if err != nil {
-		tlsUConn.Close()
-		return nil, nil, fmt.Errorf("uuid: %w", err)
-	}
-
-	grpcStream, cleanup, err := packetStream(ctx, tlsUConn, address, c.cfg.GRPCServiceName)
+	grpcStream, cleanup, err := packetStream(ctx, tlsUConn, c.address, c.cfg.GRPCServiceName)
 	if err != nil {
 		tlsUConn.Close()
 		return nil, nil, fmt.Errorf("packet stream: %w", err)
 	}
 
-	if err := writeVLESSHeader(grpcStream, uuidBytes, target); err != nil {
+	if err := writeVLESSHeader(grpcStream, c.uuidBytes, target); err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("vless header: %w", err)
 	}
