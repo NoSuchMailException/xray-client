@@ -31,7 +31,7 @@ func main() {
 
 	slog.Debug("with debug")
 
-	cfg, err := config.Load("config.yaml")
+	cfg, err := config.InitConfig("config.yaml")
 	if err != nil {
 		slog.Error("[config] load config", "err", err)
 		os.Exit(1)
@@ -55,7 +55,7 @@ func main() {
 	relay := relayPkg.NewRelay(inbound, outbound)
 
 	go func() {
-		slog.Info("[inbound] listening", "addr", address)
+		slog.Info("[inbound] listening", "addr", address, "client", cfg.Outbound.Remark)
 		if err := inbound.ListenAndServe(ctx); err != nil && err != context.Canceled {
 			slog.Error("[inbound] listen and serve", "err", err)
 		}
