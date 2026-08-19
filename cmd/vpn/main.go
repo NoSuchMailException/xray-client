@@ -17,6 +17,8 @@ import (
 	relayPkg "github.com/NoSuchMailException/xray-client/internal/relay"
 )
 
+var Version = "dev"
+
 func main() {
 	verbose := flag.Bool("v", false, "enable debug logging")
 	flag.Parse()
@@ -55,7 +57,7 @@ func main() {
 	relay := relayPkg.NewRelay(inbound, outbound)
 
 	go func() {
-		slog.Info("[inbound] listening", "addr", address, "client", cfg.Outbound.Remark)
+		slog.Info("[inbound] listening", "addr", address, "client", cfg.Outbound.Remark, "version", Version)
 		if err := inbound.ListenAndServe(ctx); err != nil && err != context.Canceled {
 			slog.Error("[inbound] listen and serve", "err", err)
 		}
