@@ -2,7 +2,10 @@ module github.com/NoSuchMailException/xray-client
 
 go 1.26.2
 
-require gopkg.in/yaml.v3 v3.0.1
+require (
+	github.com/denisbrodbeck/machineid v1.0.1
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect

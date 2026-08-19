@@ -99,7 +99,8 @@ func ensureOutbound(out *OutboundConfig) bool {
 	return CheckOrSetVLESS(out)
 }
 
-// Load reads and parses a YAML configuration file at the given path.
+// Load reads and parses a YAML configuration file at the given path,
+// and decrypts sensitive outbound credentials.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -107,18 +108,54 @@ func Load(path string) (*Config, error) {
 	}
 
 	var cfg Config
-
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse yaml: %w", err)
+	}
+
+	if cfg.Outbound.UUID == "" {
+		return nil, fmt.Errorf("config is empty or missing outbound selection")
+	}
+
+	cfg.Outbound.UUID, err = Decrypt(cfg.Outbound.UUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt uuid: %w", err)
+	}
+
+	cfg.Outbound.PublicKey, err = Decrypt(cfg.Outbound.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt public key: %w", err)
+	}
+
+	cfg.Outbound.ShortID, err = Decrypt(cfg.Outbound.ShortID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt short id: %w", err)
 	}
 
 	return &cfg, nil
 }
 
-// Save marshals the configuration state and writes it to the specified file path
-// with restricted 0600 permissions.
+// Save marshals the configuration state, encrypts sensitive outbound fields,
+// and writes the result to the specified file path with restricted 0600 permissions.
 func Save(path string, cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
+	cfgToSave := *cfg
+
+	var err error
+	cfgToSave.Outbound.UUID, err = Encrypt(cfg.Outbound.UUID)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt uuid: %w", err)
+	}
+
+	cfgToSave.Outbound.PublicKey, err = Encrypt(cfg.Outbound.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt public key: %w", err)
+	}
+
+	cfgToSave.Outbound.ShortID, err = Encrypt(cfg.Outbound.ShortID)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt short id: %w", err)
+	}
+
+	data, err := yaml.Marshal(cfgToSave)
 	if err != nil {
 		return fmt.Errorf("marshal yaml: %w", err)
 	}
